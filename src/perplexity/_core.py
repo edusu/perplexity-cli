@@ -138,6 +138,31 @@ class ClientCore:
                     logger.warning("Failed to parse SSE data: %s", raw[:200])
 
 
+    async def get_json(self, url: str) -> Any:
+        """Send an authenticated GET request and return parsed JSON.
+
+        Args:
+            url: The API endpoint URL.
+
+        Returns:
+            Parsed JSON response.
+
+        Raises:
+            AuthenticationError: On 401/403 responses.
+            RateLimitError: On 429 responses.
+            ChatError: On other HTTP errors.
+        """
+        if self._client is None:
+            raise RuntimeError("Client not initialized. Use 'async with' context.")
+
+        headers = self._build_headers()
+        headers["Accept"] = "application/json"
+
+        response = await self._client.get(url, headers=headers)
+        _check_response_status(response)
+        return response.json()
+
+
 def _check_response_status(response: httpx.Response) -> None:
     """Raise appropriate exception for non-200 HTTP responses.
 

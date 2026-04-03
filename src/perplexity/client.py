@@ -10,6 +10,8 @@ from pathlib import Path
 
 from perplexity._chat import ChatAPI
 from perplexity._core import ClientCore
+from perplexity._models import ModelsAPI
+from perplexity._threads import ThreadsAPI
 from perplexity.auth import AuthTokens
 
 
@@ -24,6 +26,8 @@ class PerplexityClient:
 
     Attributes:
         chat: Chat API for asking questions.
+        models: Models API for listing available models.
+        threads: Threads API for listing conversation history.
     """
 
     def __init__(self, auth: AuthTokens):
@@ -34,6 +38,8 @@ class PerplexityClient:
         """
         self._core = ClientCore(auth)
         self.chat = ChatAPI(self._core)
+        self.models = ModelsAPI(self._core)
+        self.threads = ThreadsAPI(self._core)
 
     async def __aenter__(self) -> PerplexityClient:
         await self._core.open()

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 
 import click
 from rich.console import Console
@@ -117,8 +118,30 @@ def _render_result(
         console.print(f"[dim]{' | '.join(parts)}[/dim]")
 
 
+def _resolve_question(question: str | None) -> str:
+    """Resolve the question from argument or stdin.
+
+    If no question argument is provided and stdin is piped (not a TTY),
+    reads the question from stdin. Useful for piping content into the CLI.
+
+    Args:
+        question: The question from the CLI argument, or None if not provided.
+
+    Returns:
+        The resolved question text.
+    """
+    if question:
+        return question
+    if not sys.stdin.isatty():
+        stdin_text = sys.stdin.read().strip()
+        if stdin_text:
+            return stdin_text
+    click.echo("Error: No question provided. Pass a question as argument or pipe via stdin.", err=True)
+    raise SystemExit(1)
+
+
 @click.command()
-@click.argument("question")
+@click.argument("question", required=False, default=None)
 @click.option("--thread", "-t", default=None, help="Name this thread for later follow-ups.")
 @click.option("--model", default="pplx_pro", help="Model preference (e.g. pplx_pro).")
 @click.option("--no-sources", is_flag=True, help="Hide source citations.")
@@ -139,6 +162,7 @@ async def ask(
 
         perplexity ask "Latest news about AI" -t news --model pplx_pro
     """
+    question = _resolve_question(question)
     try:
         auth = AuthTokens.from_storage()
     except AuthenticationError as e:
@@ -158,7 +182,7 @@ async def ask(
 
 
 @click.command()
-@click.argument("question")
+@click.argument("question", required=False, default=None)
 @click.option("--thread", "-t", default=None, help="Thread name to continue (default: last used).")
 @click.option("--model", default="pplx_pro", help="Model preference (e.g. pplx_pro).")
 @click.option("--no-sources", is_flag=True, help="Hide source citations.")
@@ -180,6 +204,7 @@ async def followup(
         perplexity ask "What is Python?"
         perplexity followup "Show me an example"
     """
+    question = _resolve_question(question)
     try:
         auth = AuthTokens.from_storage()
     except AuthenticationError as e:
@@ -214,7 +239,7 @@ async def followup(
 
 
 @click.command()
-@click.argument("question")
+@click.argument("question", required=False, default=None)
 @click.option("--thread", "-t", default=None, help="Name this research thread.")
 @click.option("--no-sources", is_flag=True, help="Hide source citations.")
 @click.option("--raw", is_flag=True, help="Print raw answer without Rich formatting.")
@@ -233,6 +258,7 @@ async def research(
 
         perplexity research "Compare Rust vs Go for web servers" -t rustvsgo
     """
+    question = _resolve_question(question)
     try:
         auth = AuthTokens.from_storage()
     except AuthenticationError as e:
@@ -278,5 +304,43 @@ def list_threads() -> None:
             table.add_row(f.stem, slug)
         except (json.JSONDecodeError, KeyError):
             table.add_row(f.stem, "[red]corrupt[/red]")
+
+    console.print(table)
+
+
+@click.command()
+@run_async
+async def history() -> None:
+    """List recent conversation threads from the server.
+
+    Shows the 20 most recent threads from your Perplexity account,
+    including threads created from the web UI.
+    """
+    try:
+        auth = AuthTokens.from_storage()
+    except AuthenticationError as e:
+        console.print(f"[red]{e}[/red]")
+        raise SystemExit(1)
+
+    try:
+        async with PerplexityClient(auth) as client:
+            threads = await client.threads.list_recent()
+    except PerplexityError as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise SystemExit(1)
+
+    if not threads:
+        console.print("[dim]No recent threads found.[/dim]")
+        return
+
+    table = Table(show_header=True)
+    table.add_column("#", style="dim", width=3)
+    table.add_column("Title", style="bold")
+    table.add_column("Status", style="dim")
+    table.add_column("Link", style="dim")
+
+    for i, t in enumerate(threads, 1):
+        link = f"perplexity.ai{t.link}" if t.link else ""
+        table.add_row(str(i), t.title, t.status, link)
 
     console.print(table)

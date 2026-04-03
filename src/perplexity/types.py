@@ -41,3 +41,43 @@ class AskResult:
     thread_url_slug: str | None = None
     model: str | None = None
     read_write_token: str | None = None
+
+
+@dataclass
+class Model:
+    """A model available in Perplexity.
+
+    Attributes:
+        name: Internal model identifier (e.g. "pplx_pro", "claude2").
+        label: User-facing display name (e.g. "Best", "Claude Sonnet 4.0").
+        description: Short description of the model's capabilities.
+        mode: Execution mode (e.g. "search", "research", "agentic_research").
+        provider: Provider name (e.g. "OPENAI", "ANTHROPIC", "GOOGLE") or None for Perplexity models.
+    """
+
+    name: str
+    label: str
+    description: str
+    mode: str
+    provider: str | None = None
+
+
+@dataclass
+class Thread:
+    """A conversation thread from Perplexity's server history.
+
+    Attributes:
+        uuid: Server-assigned thread ID.
+        title: Auto-generated thread title from the first question.
+        link: Relative URL path to view the thread on perplexity.ai.
+        status: Thread status (e.g. "completed").
+        context_uuid: Context ID for the thread.
+        variant: Thread type (e.g. "thread").
+    """
+
+    uuid: str
+    title: str
+    link: str
+    status: str
+    context_uuid: str | None = None
+    variant: str | None = None
