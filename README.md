@@ -8,6 +8,7 @@ Perplexity has an official API (Sonar), but it requires separate API keys and pa
 
 ## Features
 
+- **Interactive REPL** — `perplexity chat` for a conversational session with auto follow-ups
 - **Chat** — Ask questions and get answers with source citations
 - **Follow-ups** — Continue conversations with named threads
 - **Deep Research** — Run multi-step research queries (1-3 min)
@@ -163,6 +164,60 @@ cat error.log | perplexity ask "Explain this error" --raw
 git diff | perplexity ask "Review these changes" --raw
 ```
 
+### Interactive chat (REPL)
+
+Start a conversational session. Follow-ups are automatic — each question continues the same thread until you type `/new`.
+
+```bash
+perplexity chat
+```
+
+```
+Perplexity Chat — interactive mode
+Model: pplx_pro | Type /help for commands
+
+pplx_pro> What is Rust?
+
+Rust is a modern systems programming language focused on safety, speed,
+and concurrency without a garbage collector. [1][2]
+
+Sources:
+  [1] Rust - Wikipedia
+  [2] The Rust Programming Language
+
+pplx_pro> Is it faster than C++?
+
+In many benchmarks Rust performs comparably to C++...
+
+pplx_pro> /new
+New conversation started.
+
+pplx_pro> What is Go?
+
+Go is a statically typed, compiled language designed at Google...
+
+pplx_pro> /model claude46opus
+Model set to: claude46opus
+
+claude46opus> Explain monads in simple terms
+
+...
+
+pplx_pro> /quit
+Goodbye.
+```
+
+**REPL commands:**
+
+| Command | Description |
+|---------|-------------|
+| `/new` | Start a new conversation |
+| `/model NAME` | Switch model (e.g. `/model claude46opus`) |
+| `/research` | Toggle deep research mode on/off |
+| `/sources` | Toggle source display on/off |
+| `/help` | Show available commands |
+| `/quit` | Exit (also Ctrl+D or Ctrl+C) |
+
 ### List models
 
 ```bash
@@ -229,6 +284,7 @@ asyncio.run(main())
 |---------|-------------|
 | `perplexity login` | Authenticate via browser |
 | `perplexity status` | Show authentication status |
+| `perplexity chat` | Interactive REPL with auto follow-ups |
 | `perplexity ask [QUESTION]` | Ask a question (new thread) |
 | `perplexity followup [QUESTION]` | Continue a conversation |
 | `perplexity research [QUESTION]` | Deep research query |

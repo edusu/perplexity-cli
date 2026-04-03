@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import click
 
-from perplexity.cli.chat import ask, followup, history, list_threads, research
+from perplexity.cli.chat import ask, chat, followup, history, list_threads, research
 from perplexity.cli.models import models
 from perplexity.cli.session import login, status
 
@@ -28,6 +28,7 @@ def cli(ctx: click.Context, storage: str | None) -> None:
 cli.add_command(login)
 cli.add_command(status)
 cli.add_command(ask)
+cli.add_command(chat)
 cli.add_command(followup)
 cli.add_command(research)
 cli.add_command(models)

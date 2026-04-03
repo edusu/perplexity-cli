@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import sys
 
@@ -344,3 +345,142 @@ async def history() -> None:
         table.add_row(str(i), t.title, t.status, link)
 
     console.print(table)
+
+
+_CHAT_HELP = """
+  [bold]Commands:[/bold]
+    [cyan]/new[/cyan]            Start a new conversation
+    [cyan]/model NAME[/cyan]    Switch model (e.g. /model claude46opus)
+    [cyan]/research[/cyan]       Toggle deep research mode
+    [cyan]/sources[/cyan]        Toggle source display
+    [cyan]/help[/cyan]           Show this help
+    [cyan]/quit[/cyan]           Exit (also Ctrl+D or Ctrl+C)
+"""
+
+
+@click.command("chat")
+@click.option("--model", default="pplx_pro", help="Initial model preference.")
+@click.option("--no-sources", is_flag=True, help="Start with sources hidden.")
+def chat(model: str, no_sources: bool) -> None:
+    """Interactive chat REPL with automatic follow-ups.
+
+    Start a conversation and keep asking questions. Follow-ups are
+    automatic within the same thread. Use /new to start a fresh thread.
+
+    Examples:
+
+        perplexity chat
+
+        perplexity chat --model claude46opus
+    """
+    try:
+        auth = AuthTokens.from_storage()
+    except AuthenticationError as e:
+        console.print(f"[red]{e}[/red]")
+        raise SystemExit(1)
+
+    asyncio.run(_chat_loop(auth, model, no_sources))
+
+
+async def _chat_loop(auth: AuthTokens, model: str, hide_sources: bool) -> None:
+    """Run the interactive chat REPL.
+
+    Args:
+        auth: Authentication tokens.
+        model: Initial model preference.
+        hide_sources: Whether to hide source citations initially.
+    """
+    console.print()
+    console.print("[bold]Perplexity Chat[/bold] — interactive mode")
+    console.print(f"[dim]Model: {model} | Type /help for commands[/dim]")
+    console.print()
+
+    previous: AskResult | None = None
+    research_mode = False
+
+    async with PerplexityClient(auth) as client:
+        while True:
+            # Prompt
+            try:
+                prompt_model = model if not research_mode else "research"
+                question = console.input(f"[bold cyan]{prompt_model}>[/bold cyan] ")
+            except (EOFError, KeyboardInterrupt):
+                console.print("\n[dim]Goodbye.[/dim]")
+                break
+
+            question = question.strip()
+            if not question:
+                continue
+
+            # Handle slash commands
+            if question.startswith("/"):
+                cmd = question.lower().split()
+                match cmd[0]:
+                    case "/quit" | "/exit" | "/q":
+                        console.print("[dim]Goodbye.[/dim]")
+                        break
+                    case "/new":
+                        previous = None
+                        console.print("[dim]New conversation started.[/dim]")
+                        continue
+                    case "/model":
+                        if len(cmd) > 1:
+                            model = cmd[1]
+                            console.print(f"[dim]Model set to: {model}[/dim]")
+                        else:
+                            console.print(f"[dim]Current model: {model}[/dim]")
+                        continue
+                    case "/research":
+                        research_mode = not research_mode
+                        state = "on" if research_mode else "off"
+                        console.print(f"[dim]Deep research mode: {state}[/dim]")
+                        continue
+                    case "/sources":
+                        hide_sources = not hide_sources
+                        state = "hidden" if hide_sources else "shown"
+                        console.print(f"[dim]Sources: {state}[/dim]")
+                        continue
+                    case "/help":
+                        console.print(_CHAT_HELP)
+                        continue
+                    case _:
+                        console.print(f"[yellow]Unknown command: {cmd[0]}[/yellow]")
+                        continue
+
+            # Send the question
+            try:
+                active_model = "pplx_alpha" if research_mode else model
+
+                if research_mode and not previous:
+                    console.print("[dim]Researching (this may take 1-3 minutes)...[/dim]")
+
+                if previous:
+                    result = await client.chat.ask_followup(
+                        question, previous=previous, model=active_model
+                    )
+                else:
+                    result = await client.chat.ask(
+                        question, model=active_model
+                    )
+
+                previous = result
+
+            except PerplexityError as e:
+                console.print(f"[red]Error: {e}[/red]")
+                continue
+
+            # Render
+            if not result.answer:
+                console.print("[yellow]No answer received.[/yellow]")
+                continue
+
+            console.print()
+            console.print(Markdown(result.answer))
+            console.print()
+
+            if not hide_sources and result.sources:
+                console.print("[bold]Sources:[/bold]")
+                for i, source in enumerate(result.sources, 1):
+                    console.print(f"  [cyan][{i}][/cyan] {source.name}")
+                    console.print(f"      [dim]{source.url}[/dim]")
+                console.print()
