@@ -4,17 +4,15 @@ from __future__ import annotations
 
 import json
 import sys
+from pathlib import Path
 
 import click
-from rich.console import Console
 
-from perplexity.auth import AuthTokens
-from perplexity.exceptions import AuthenticationError
+from perplexity._core import PERPLEXITY_BASE_URL
+from perplexity.cli.helpers import console, get_storage_from_ctx, require_auth
 from perplexity.paths import get_browser_profile_dir, get_storage_path
 
-console = Console()
-
-PERPLEXITY_URL = "https://www.perplexity.ai/"
+PERPLEXITY_URL = f"{PERPLEXITY_BASE_URL}/"
 
 
 @click.command()
@@ -85,11 +83,12 @@ def login() -> None:
         except EOFError:
             # Non-interactive shell — wait for signal file instead
             import time
-            from pathlib import Path
 
             signal_file = get_storage_path().parent / ".save_signal"
             signal_file.unlink(missing_ok=True)
-            console.print("[dim]Non-interactive mode: create ~/.perplexity/.save_signal to save[/dim]")
+            console.print(
+                "[dim]Non-interactive mode: create ~/.perplexity/.save_signal to save[/dim]"
+            )
             try:
                 while not signal_file.exists():
                     time.sleep(1)
@@ -120,31 +119,32 @@ def login() -> None:
 
 
 @click.command()
-def status() -> None:
+@click.pass_context
+def status(ctx: click.Context) -> None:
     """Show current authentication status."""
-    try:
-        auth = AuthTokens.from_storage()
-        n_cookies = len(auth.cookies)
-        console.print(f"[green]Logged in[/green] — {n_cookies} cookies loaded")
-        console.print()
-        # Show key cookie names (not values)
-        key_cookies = [
-            "__Secure-next-auth.session-token",
-            "cf_clearance",
-            "pplx.session-id",
-        ]
-        for name in key_cookies:
-            if name in auth.cookies:
-                console.print(f"  [green]✓[/green] {name}")
-            else:
-                console.print(f"  [dim]✗ {name}[/dim]")
-    except AuthenticationError as e:
-        console.print(f"[red]Not logged in[/red] — {e}")
-        raise SystemExit(1)
+    auth = require_auth(get_storage_from_ctx(ctx))
+    n_cookies = len(auth.cookies)
+    console.print(f"[green]Logged in[/green] — {n_cookies} cookies loaded")
+    console.print()
+    # Show key cookie names (not values)
+    key_cookies = [
+        "__Secure-next-auth.session-token",
+        "cf_clearance",
+        "pplx.session-id",
+    ]
+    for name in key_cookies:
+        if name in auth.cookies:
+            console.print(f"  [green]✓[/green] {name}")
+        else:
+            console.print(f"  [dim]✗ {name}[/dim]")
 
 
-def _print_cookie_summary(storage_path) -> None:
-    """Print a summary of captured cookies grouped by domain."""
+def _print_cookie_summary(storage_path: Path) -> None:
+    """Print a summary of captured cookies grouped by domain.
+
+    Args:
+        storage_path: Path to the Playwright storage state JSON file.
+    """
     with open(storage_path) as f:
         state = json.load(f)
 

@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Any
-
-from perplexity._core import PERPLEXITY_BASE_URL, ClientCore
+from perplexity._core import API_VERSION, PERPLEXITY_BASE_URL, ClientCore
 from perplexity.types import Model
 
-_MODELS_CONFIG_URL = f"{PERPLEXITY_BASE_URL}/rest/models/config?config_schema=v1&version=2.18&source=default"
+_MODELS_CONFIG_URL = f"{PERPLEXITY_BASE_URL}/rest/models/config?config_schema=v1&version={API_VERSION}&source=default"
 
 
 class ModelsAPI:

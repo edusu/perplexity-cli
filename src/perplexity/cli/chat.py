@@ -5,26 +5,31 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
+from pathlib import Path
 
 import click
-from rich.console import Console
 from rich.markdown import Markdown
 from rich.table import Table
 
+from perplexity._chat import MODEL_PRO, MODEL_RESEARCH
 from perplexity.auth import AuthTokens
-from perplexity.cli.helpers import run_async
+from perplexity.cli.helpers import (
+    authenticated_client,
+    console,
+    get_storage_from_ctx,
+    require_auth,
+    run_async,
+)
 from perplexity.client import PerplexityClient
-from perplexity.exceptions import AuthenticationError, PerplexityError
+from perplexity.exceptions import PerplexityError
 from perplexity.paths import get_threads_dir
 from perplexity.types import AskResult
-
-console = Console()
 
 # Name used when --thread is not specified
 _DEFAULT_THREAD = "_last"
 
 
-def _thread_path(name: str):
+def _thread_path(name: str) -> Path:
     """Return the JSON file path for a named thread."""
     return get_threads_dir() / f"{name}.json"
 
@@ -39,17 +44,19 @@ def _save_thread(name: str, result: AskResult) -> None:
         name: Thread name (user-chosen or _last).
         result: AskResult with metadata to save.
     """
-    data = {
-        "backend_uuid": result.backend_uuid,
-        "context_uuid": result.context_uuid,
-        "read_write_token": result.read_write_token,
-        "thread_url_slug": result.thread_url_slug,
-        "model": result.model,
-    }
-    _thread_path(name).write_text(json.dumps(data))
+    data_json = json.dumps(
+        {
+            "backend_uuid": result.backend_uuid,
+            "context_uuid": result.context_uuid,
+            "read_write_token": result.read_write_token,
+            "thread_url_slug": result.thread_url_slug,
+            "model": result.model,
+        }
+    )
+    _thread_path(name).write_text(data_json)
     # Also update _last so bare `followup` without --thread works
     if name != _DEFAULT_THREAD:
-        _thread_path(_DEFAULT_THREAD).write_text(json.dumps(data))
+        _thread_path(_DEFAULT_THREAD).write_text(data_json)
 
 
 def _load_thread(name: str) -> AskResult | None:
@@ -79,8 +86,12 @@ def _load_thread(name: str) -> AskResult | None:
 
 
 def _render_result(
-    result: AskResult, raw: bool, no_sources: bool, thread_name: str | None = None
-) -> None:
+    result: AskResult,
+    raw: bool,
+    no_sources: bool,
+    thread_name: str | None = None,
+    exit_on_empty: bool = True,
+) -> bool:
     """Render an AskResult to the terminal.
 
     Args:
@@ -88,14 +99,21 @@ def _render_result(
         raw: If True, print plain text without Rich formatting.
         no_sources: If True, hide source citations.
         thread_name: Optional thread name to show in the footer.
+        exit_on_empty: If True, exit with code 1 when answer is empty.
+            Set False in interactive loops where we want to continue.
+
+    Returns:
+        True if an answer was rendered, False if the answer was empty.
     """
     if not result.answer:
         console.print("[yellow]No answer received.[/yellow]")
-        raise SystemExit(1)
+        if exit_on_empty:
+            raise SystemExit(1)
+        return False
 
     if raw:
         click.echo(result.answer)
-        return
+        return True
 
     console.print()
     console.print(Markdown(result.answer))
@@ -117,6 +135,7 @@ def _render_result(
         parts.append(f"perplexity.ai/search/{result.thread_url_slug}")
     if parts:
         console.print(f"[dim]{' | '.join(parts)}[/dim]")
+    return True
 
 
 def _resolve_question(question: str | None) -> str:
@@ -137,19 +156,27 @@ def _resolve_question(question: str | None) -> str:
         stdin_text = sys.stdin.read().strip()
         if stdin_text:
             return stdin_text
-    click.echo("Error: No question provided. Pass a question as argument or pipe via stdin.", err=True)
+    click.echo(
+        "Error: No question provided. Pass a question as argument or pipe via stdin.", err=True
+    )
     raise SystemExit(1)
 
 
 @click.command()
 @click.argument("question", required=False, default=None)
 @click.option("--thread", "-t", default=None, help="Name this thread for later follow-ups.")
-@click.option("--model", default="pplx_pro", help="Model preference (e.g. pplx_pro).")
+@click.option("--model", default=MODEL_PRO, help="Model preference (e.g. pplx_pro).")
 @click.option("--no-sources", is_flag=True, help="Hide source citations.")
 @click.option("--raw", is_flag=True, help="Print raw answer without Rich formatting.")
+@click.pass_context
 @run_async
 async def ask(
-    question: str, thread: str | None, model: str, no_sources: bool, raw: bool
+    ctx: click.Context,
+    question: str,
+    thread: str | None,
+    model: str,
+    no_sources: bool,
+    raw: bool,
 ) -> None:
     """Ask Perplexity a question and display the answer.
 
@@ -164,18 +191,8 @@ async def ask(
         perplexity ask "Latest news about AI" -t news --model pplx_pro
     """
     question = _resolve_question(question)
-    try:
-        auth = AuthTokens.from_storage()
-    except AuthenticationError as e:
-        console.print(f"[red]{e}[/red]")
-        raise SystemExit(1)
-
-    try:
-        async with PerplexityClient(auth) as client:
-            result = await client.chat.ask(question, model=model)
-    except PerplexityError as e:
-        console.print(f"[red]Error: {e}[/red]")
-        raise SystemExit(1)
+    async with authenticated_client(get_storage_from_ctx(ctx)) as client:
+        result = await client.chat.ask(question, model=model)
 
     thread_name = thread or _DEFAULT_THREAD
     _save_thread(thread_name, result)
@@ -185,12 +202,18 @@ async def ask(
 @click.command()
 @click.argument("question", required=False, default=None)
 @click.option("--thread", "-t", default=None, help="Thread name to continue (default: last used).")
-@click.option("--model", default="pplx_pro", help="Model preference (e.g. pplx_pro).")
+@click.option("--model", default=MODEL_PRO, help="Model preference (e.g. pplx_pro).")
 @click.option("--no-sources", is_flag=True, help="Hide source citations.")
 @click.option("--raw", is_flag=True, help="Print raw answer without Rich formatting.")
+@click.pass_context
 @run_async
 async def followup(
-    question: str, thread: str | None, model: str, no_sources: bool, raw: bool
+    ctx: click.Context,
+    question: str,
+    thread: str | None,
+    model: str,
+    no_sources: bool,
+    raw: bool,
 ) -> None:
     """Ask a follow-up question in an existing conversation thread.
 
@@ -206,11 +229,6 @@ async def followup(
         perplexity followup "Show me an example"
     """
     question = _resolve_question(question)
-    try:
-        auth = AuthTokens.from_storage()
-    except AuthenticationError as e:
-        console.print(f"[red]{e}[/red]")
-        raise SystemExit(1)
 
     thread_name = thread or _DEFAULT_THREAD
     previous = _load_thread(thread_name)
@@ -226,14 +244,8 @@ async def followup(
             )
         raise SystemExit(1)
 
-    try:
-        async with PerplexityClient(auth) as client:
-            result = await client.chat.ask_followup(
-                question, previous=previous, model=model
-            )
-    except PerplexityError as e:
-        console.print(f"[red]Error: {e}[/red]")
-        raise SystemExit(1)
+    async with authenticated_client(get_storage_from_ctx(ctx)) as client:
+        result = await client.chat.ask_followup(question, previous=previous, model=model)
 
     _save_thread(thread_name, result)
     _render_result(result, raw, no_sources, thread_name=thread)
@@ -244,9 +256,14 @@ async def followup(
 @click.option("--thread", "-t", default=None, help="Name this research thread.")
 @click.option("--no-sources", is_flag=True, help="Hide source citations.")
 @click.option("--raw", is_flag=True, help="Print raw answer without Rich formatting.")
+@click.pass_context
 @run_async
 async def research(
-    question: str, thread: str | None, no_sources: bool, raw: bool
+    ctx: click.Context,
+    question: str,
+    thread: str | None,
+    no_sources: bool,
+    raw: bool,
 ) -> None:
     """Run a deep research query on a topic.
 
@@ -260,21 +277,12 @@ async def research(
         perplexity research "Compare Rust vs Go for web servers" -t rustvsgo
     """
     question = _resolve_question(question)
-    try:
-        auth = AuthTokens.from_storage()
-    except AuthenticationError as e:
-        console.print(f"[red]{e}[/red]")
-        raise SystemExit(1)
 
     if not raw:
         console.print("[yellow]Starting deep research (this may take 1-3 minutes)...[/yellow]")
 
-    try:
-        async with PerplexityClient(auth) as client:
-            result = await client.chat.research(question)
-    except PerplexityError as e:
-        console.print(f"[red]Error: {e}[/red]")
-        raise SystemExit(1)
+    async with authenticated_client(get_storage_from_ctx(ctx)) as client:
+        result = await client.chat.research(question)
 
     thread_name = thread or _DEFAULT_THREAD
     _save_thread(thread_name, result)
@@ -310,25 +318,16 @@ def list_threads() -> None:
 
 
 @click.command()
+@click.pass_context
 @run_async
-async def history() -> None:
+async def history(ctx: click.Context) -> None:
     """List recent conversation threads from the server.
 
     Shows the 20 most recent threads from your Perplexity account,
     including threads created from the web UI.
     """
-    try:
-        auth = AuthTokens.from_storage()
-    except AuthenticationError as e:
-        console.print(f"[red]{e}[/red]")
-        raise SystemExit(1)
-
-    try:
-        async with PerplexityClient(auth) as client:
-            threads = await client.threads.list_recent()
-    except PerplexityError as e:
-        console.print(f"[red]Error: {e}[/red]")
-        raise SystemExit(1)
+    async with authenticated_client(get_storage_from_ctx(ctx)) as client:
+        threads = await client.threads.list_recent()
 
     if not threads:
         console.print("[dim]No recent threads found.[/dim]")
@@ -359,9 +358,10 @@ _CHAT_HELP = """
 
 
 @click.command("chat")
-@click.option("--model", default="pplx_pro", help="Initial model preference.")
+@click.option("--model", default=MODEL_PRO, help="Initial model preference.")
 @click.option("--no-sources", is_flag=True, help="Start with sources hidden.")
-def chat(model: str, no_sources: bool) -> None:
+@click.pass_context
+def chat(ctx: click.Context, model: str, no_sources: bool) -> None:
     """Interactive chat REPL with automatic follow-ups.
 
     Start a conversation and keep asking questions. Follow-ups are
@@ -373,12 +373,7 @@ def chat(model: str, no_sources: bool) -> None:
 
         perplexity chat --model claude46opus
     """
-    try:
-        auth = AuthTokens.from_storage()
-    except AuthenticationError as e:
-        console.print(f"[red]{e}[/red]")
-        raise SystemExit(1)
-
+    auth = require_auth(get_storage_from_ctx(ctx))
     asyncio.run(_chat_loop(auth, model, no_sources))
 
 
@@ -400,7 +395,6 @@ async def _chat_loop(auth: AuthTokens, model: str, hide_sources: bool) -> None:
 
     async with PerplexityClient(auth) as client:
         while True:
-            # Prompt
             try:
                 prompt_model = model if not research_mode else "research"
                 question = console.input(f"[bold cyan]{prompt_model}>[/bold cyan] ")
@@ -449,7 +443,7 @@ async def _chat_loop(auth: AuthTokens, model: str, hide_sources: bool) -> None:
 
             # Send the question
             try:
-                active_model = "pplx_alpha" if research_mode else model
+                active_model = MODEL_RESEARCH if research_mode else model
 
                 if research_mode and not previous:
                     console.print("[dim]Researching (this may take 1-3 minutes)...[/dim]")
@@ -459,9 +453,7 @@ async def _chat_loop(auth: AuthTokens, model: str, hide_sources: bool) -> None:
                         question, previous=previous, model=active_model
                     )
                 else:
-                    result = await client.chat.ask(
-                        question, model=active_model
-                    )
+                    result = await client.chat.ask(question, model=active_model)
 
                 previous = result
 
@@ -469,18 +461,4 @@ async def _chat_loop(auth: AuthTokens, model: str, hide_sources: bool) -> None:
                 console.print(f"[red]Error: {e}[/red]")
                 continue
 
-            # Render
-            if not result.answer:
-                console.print("[yellow]No answer received.[/yellow]")
-                continue
-
-            console.print()
-            console.print(Markdown(result.answer))
-            console.print()
-
-            if not hide_sources and result.sources:
-                console.print("[bold]Sources:[/bold]")
-                for i, source in enumerate(result.sources, 1):
-                    console.print(f"  [cyan][{i}][/cyan] {source.name}")
-                    console.print(f"      [dim]{source.url}[/dim]")
-                console.print()
+            _render_result(result, raw=False, no_sources=hide_sources, exit_on_empty=False)

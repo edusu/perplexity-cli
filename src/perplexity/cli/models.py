@@ -3,21 +3,18 @@
 from __future__ import annotations
 
 import click
-from rich.console import Console
 from rich.table import Table
 
-from perplexity.auth import AuthTokens
-from perplexity.cli.helpers import run_async
-from perplexity.client import PerplexityClient
-from perplexity.exceptions import AuthenticationError, PerplexityError
-
-console = Console()
+from perplexity.cli.helpers import authenticated_client, console, get_storage_from_ctx, run_async
 
 
 @click.command()
-@click.option("--mode", default=None, help="Filter by mode (search, research, agentic_research, etc.).")
+@click.option(
+    "--mode", default=None, help="Filter by mode (search, research, agentic_research, etc.)."
+)
+@click.pass_context
 @run_async
-async def models(mode: str | None) -> None:
+async def models(ctx: click.Context, mode: str | None) -> None:
     """List available models.
 
     Shows all models you can use with --model in ask/followup commands.
@@ -30,18 +27,8 @@ async def models(mode: str | None) -> None:
 
         perplexity models --mode research
     """
-    try:
-        auth = AuthTokens.from_storage()
-    except AuthenticationError as e:
-        console.print(f"[red]{e}[/red]")
-        raise SystemExit(1)
-
-    try:
-        async with PerplexityClient(auth) as client:
-            model_list = await client.models.list(mode=mode)
-    except PerplexityError as e:
-        console.print(f"[red]Error: {e}[/red]")
-        raise SystemExit(1)
+    async with authenticated_client(get_storage_from_ctx(ctx)) as client:
+        model_list = await client.models.list(mode=mode)
 
     if not model_list:
         console.print("[yellow]No models found.[/yellow]")

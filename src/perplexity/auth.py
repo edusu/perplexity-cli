@@ -49,8 +49,9 @@ def _is_allowed_domain(domain: str) -> bool:
     """
     if domain in ALLOWED_COOKIE_DOMAINS:
         return True
-    # Accept any subdomain of perplexity.ai
-    return domain.endswith(".perplexity.ai") or domain.endswith("perplexity.ai")
+    # Accept exact match or any subdomain of perplexity.ai
+    # Using ".perplexity.ai" suffix to avoid matching e.g. "evilperplexity.ai"
+    return domain == "perplexity.ai" or domain.endswith(".perplexity.ai")
 
 
 def extract_cookies_from_storage(storage_state: dict[str, Any]) -> dict[str, str]:
@@ -130,9 +131,7 @@ def load_storage_state(path: Path | None = None) -> dict[str, Any]:
     # 3. Default path
     default_path = get_storage_path()
     if not default_path.exists():
-        raise AuthenticationError(
-            "Not logged in. Run 'perplexity login' to authenticate."
-        )
+        raise AuthenticationError("Not logged in. Run 'perplexity login' to authenticate.")
     return json.loads(default_path.read_text())
 
 

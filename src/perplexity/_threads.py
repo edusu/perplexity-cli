@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from perplexity._core import PERPLEXITY_BASE_URL, ClientCore
+from perplexity._core import API_VERSION, PERPLEXITY_BASE_URL, ClientCore
 from perplexity.types import Thread
 
-_LIST_RECENT_URL = f"{PERPLEXITY_BASE_URL}/rest/thread/list_recent?exclude_asi=false&version=2.18&source=default"
+_LIST_RECENT_URL = f"{PERPLEXITY_BASE_URL}/rest/thread/list_recent?exclude_asi=false&version={API_VERSION}&source=default"
 
 
 class ThreadsAPI:

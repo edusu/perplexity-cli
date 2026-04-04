@@ -6,19 +6,25 @@ Perplexity's internal API and parses streamed responses into structured results.
 
 from __future__ import annotations
 
+import functools
 import logging
 import uuid
 from collections.abc import AsyncIterator
 from datetime import datetime, timezone
 from typing import Any
 
-from perplexity._core import PERPLEXITY_ASK_URL, ClientCore
+from perplexity._core import API_VERSION, PERPLEXITY_ASK_URL, ClientCore
 from perplexity.types import AskResult, Source
 
 logger = logging.getLogger(__name__)
 
-# API version observed in captured traffic
-_API_VERSION = "2.18"
+# SSE block intended_usage constants
+USAGE_ANSWER_MARKDOWN = "ask_text_0_markdown"
+USAGE_WEB_RESULTS = "web_results"
+
+# Model identifiers
+MODEL_PRO = "pplx_pro"
+MODEL_RESEARCH = "pplx_alpha"
 
 # Minimal set of supported block types for the API response
 _SUPPORTED_BLOCKS = [
@@ -32,8 +38,11 @@ _SUPPORTED_BLOCKS = [
 ]
 
 
+@functools.lru_cache(maxsize=1)
 def _detect_timezone() -> str:
     """Detect the local timezone name for the API request.
+
+    Cached because the timezone doesn't change during a process lifetime.
 
     Returns:
         IANA timezone string, or UTC as fallback.
@@ -95,7 +104,7 @@ def _build_ask_payload(
             "mentions": [],
             "skip_search_enabled": True,
             "source": "default",
-            "version": _API_VERSION,
+            "version": API_VERSION,
         },
     }
 
@@ -190,10 +199,63 @@ class ChatAPI:
         """
         self._core = core
 
+    async def _collect_response(self, payload: dict[str, Any]) -> AskResult:
+        """Stream an SSE response and assemble the final AskResult.
+
+        Shared by ask() and ask_followup() — both differ only in payload
+        construction, not in how the response stream is processed.
+
+        Args:
+            payload: Complete JSON payload for the perplexity_ask endpoint.
+
+        Returns:
+            AskResult with answer text, sources, and metadata.
+        """
+        chunks: list[str] = []
+        raw_sources: list[dict[str, Any]] = []
+        metadata: dict[str, Any] = {}
+
+        async for evt in self._core.sse_request(PERPLEXITY_ASK_URL, payload):
+            for block in evt.get("blocks", []):
+                usage = block.get("intended_usage", "")
+
+                if usage == USAGE_ANSWER_MARKDOWN:
+                    chunks = _extract_answer_text(block, chunks)
+                elif usage == USAGE_WEB_RESULTS:
+                    found = _extract_sources(block)
+                    if found:
+                        raw_sources = found
+
+            # Capture read_write_token from any event (appears early in the stream)
+            if evt.get("read_write_token") and "read_write_token" not in metadata:
+                metadata["read_write_token"] = evt["read_write_token"]
+
+            # Capture remaining metadata from the final event
+            if evt.get("final_sse_message"):
+                metadata.update(
+                    {
+                        "backend_uuid": evt.get("backend_uuid"),
+                        "context_uuid": evt.get("context_uuid"),
+                        "thread_url_slug": evt.get("thread_url_slug"),
+                        "model": evt.get("display_model"),
+                    }
+                )
+
+        sources = [
+            Source(
+                name=s.get("name", ""),
+                url=s.get("url", ""),
+                snippet=s.get("snippet", ""),
+            )
+            for s in raw_sources
+        ]
+
+        return AskResult(answer="".join(chunks), sources=sources, **metadata)
+
     async def ask(
         self,
         question: str,
-        model: str = "pplx_pro",
+        model: str = MODEL_PRO,
         mode: str = "copilot",
         search_focus: str = "internet",
         language: str = "en-US",
@@ -205,7 +267,7 @@ class ChatAPI:
 
         Args:
             question: The question to ask.
-            model: Model preference. Defaults to "pplx_pro".
+            model: Model preference. Defaults to MODEL_PRO.
             mode: Chat mode. "copilot" for Pro search. Defaults to "copilot".
             search_focus: Search scope. Defaults to "internet".
             language: Response language code. Defaults to "en-US".
@@ -214,50 +276,7 @@ class ChatAPI:
             AskResult with answer text, sources, and metadata.
         """
         payload = _build_ask_payload(question, model, mode, search_focus, language)
-
-        chunks: list[str] = []
-        raw_sources: list[dict[str, Any]] = []
-        metadata: dict[str, Any] = {}
-
-        async for evt in self._core.sse_request(PERPLEXITY_ASK_URL, payload):
-            for block in evt.get("blocks", []):
-                usage = block.get("intended_usage", "")
-
-                if usage == "ask_text_0_markdown":
-                    chunks = _extract_answer_text(block, chunks)
-
-                elif usage == "web_results":
-                    found = _extract_sources(block)
-                    if found:
-                        raw_sources = found
-
-            # Capture read_write_token from any event (appears early in the stream)
-            if evt.get("read_write_token") and "read_write_token" not in metadata:
-                metadata["read_write_token"] = evt["read_write_token"]
-
-            # Capture remaining metadata from the final event
-            if evt.get("final_sse_message"):
-                metadata.update({
-                    "backend_uuid": evt.get("backend_uuid"),
-                    "context_uuid": evt.get("context_uuid"),
-                    "thread_url_slug": evt.get("thread_url_slug"),
-                    "model": evt.get("display_model"),
-                })
-
-        sources = [
-            Source(
-                name=s.get("name", ""),
-                url=s.get("url", ""),
-                snippet=s.get("snippet", ""),
-            )
-            for s in raw_sources
-        ]
-
-        return AskResult(
-            answer="".join(chunks),
-            sources=sources,
-            **metadata,
-        )
+        return await self._collect_response(payload)
 
     async def research(
         self,
@@ -268,7 +287,7 @@ class ChatAPI:
     ) -> AskResult:
         """Run a deep research query.
 
-        Uses the pplx_alpha model which triggers Perplexity's deep research
+        Uses the MODEL_RESEARCH model which triggers Perplexity's deep research
         mode. This takes significantly longer (1-3 minutes) but produces
         more thorough, multi-step research with extensive source analysis.
 
@@ -283,7 +302,7 @@ class ChatAPI:
         """
         return await self.ask(
             question,
-            model="pplx_alpha",
+            model=MODEL_RESEARCH,
             mode=mode,
             search_focus=search_focus,
             language=language,
@@ -293,7 +312,7 @@ class ChatAPI:
         self,
         question: str,
         previous: AskResult,
-        model: str = "pplx_pro",
+        model: str = MODEL_PRO,
         mode: str = "copilot",
         search_focus: str = "internet",
         language: str = "en-US",
@@ -337,42 +356,12 @@ class ChatAPI:
         payload["params"]["frontend_context_uuid"] = None
         payload["params"]["dsl_query"] = None
 
-        chunks: list[str] = []
-        raw_sources: list[dict[str, Any]] = []
-        metadata: dict[str, Any] = {}
-
-        async for evt in self._core.sse_request(PERPLEXITY_ASK_URL, payload):
-            for block in evt.get("blocks", []):
-                usage = block.get("intended_usage", "")
-                if usage == "ask_text_0_markdown":
-                    chunks = _extract_answer_text(block, chunks)
-                elif usage == "web_results":
-                    found = _extract_sources(block)
-                    if found:
-                        raw_sources = found
-
-            if evt.get("read_write_token") and "read_write_token" not in metadata:
-                metadata["read_write_token"] = evt["read_write_token"]
-
-            if evt.get("final_sse_message"):
-                metadata.update({
-                    "backend_uuid": evt.get("backend_uuid"),
-                    "context_uuid": evt.get("context_uuid"),
-                    "thread_url_slug": evt.get("thread_url_slug"),
-                    "model": evt.get("display_model"),
-                })
-
-        sources = [
-            Source(name=s.get("name", ""), url=s.get("url", ""), snippet=s.get("snippet", ""))
-            for s in raw_sources
-        ]
-
-        return AskResult(answer="".join(chunks), sources=sources, **metadata)
+        return await self._collect_response(payload)
 
     async def ask_stream(
         self,
         question: str,
-        model: str = "pplx_pro",
+        model: str = MODEL_PRO,
         mode: str = "copilot",
         search_focus: str = "internet",
         language: str = "en-US",
@@ -397,7 +386,7 @@ class ChatAPI:
 
         async for evt in self._core.sse_request(PERPLEXITY_ASK_URL, payload):
             for block in evt.get("blocks", []):
-                if block.get("intended_usage") != "ask_text_0_markdown":
+                if block.get("intended_usage") != USAGE_ANSWER_MARKDOWN:
                     continue
 
                 # Direct format: yield new chunks

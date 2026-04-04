@@ -21,6 +21,9 @@ logger = logging.getLogger(__name__)
 PERPLEXITY_BASE_URL = "https://www.perplexity.ai"
 PERPLEXITY_ASK_URL = f"{PERPLEXITY_BASE_URL}/rest/sse/perplexity_ask"
 
+# API version observed in captured traffic — shared by all API modules
+API_VERSION = "2.18"
+
 # Mimic a real Chrome browser to avoid bot detection
 BROWSER_USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -94,9 +97,7 @@ class ClientCore:
             "Referer": f"{PERPLEXITY_BASE_URL}/",
         }
 
-    async def sse_request(
-        self, url: str, payload: dict[str, Any]
-    ) -> AsyncIterator[dict[str, Any]]:
+    async def sse_request(self, url: str, payload: dict[str, Any]) -> AsyncIterator[dict[str, Any]]:
         """Send a POST request and stream SSE events.
 
         Sends a JSON POST to the given URL and yields parsed JSON objects
@@ -119,9 +120,7 @@ class ClientCore:
 
         headers = self._build_headers()
 
-        async with self._client.stream(
-            "POST", url, json=payload, headers=headers
-        ) as response:
+        async with self._client.stream("POST", url, json=payload, headers=headers) as response:
             _check_response_status(response)
 
             async for line in response.aiter_lines():
@@ -136,7 +135,6 @@ class ClientCore:
                         yield parsed
                 except json.JSONDecodeError:
                     logger.warning("Failed to parse SSE data: %s", raw[:200])
-
 
     async def get_json(self, url: str) -> Any:
         """Send an authenticated GET request and return parsed JSON.
