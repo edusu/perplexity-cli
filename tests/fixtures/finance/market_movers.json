@@ -1,0 +1,26 @@
+{
+  "movers": [
+    {
+      "symbol": "NVDA",
+      "name": "NVIDIA Corporation",
+      "price": 201.68,
+      "change": 3.33,
+      "changesPercentage": 1.67885,
+      "currency": "USD",
+      "marketCap": 4901832394151.0,
+      "sector": "Technology",
+      "industry": "Semiconductors"
+    },
+    {
+      "symbol": "AAPL",
+      "name": "Apple Inc.",
+      "price": 270.23,
+      "change": 6.83,
+      "changesPercentage": 2.59301,
+      "currency": "USD",
+      "marketCap": 3971820706468.99,
+      "sector": "Technology",
+      "industry": "Consumer Electronics"
+    }
+  ]
+}

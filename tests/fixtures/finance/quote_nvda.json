@@ -1,0 +1,31 @@
+{
+  "isCrypto": false,
+  "symbol": "NVDA",
+  "name": "NVIDIA Corporation",
+  "price": 201.68,
+  "change": 3.33,
+  "changesPercentage": 1.6789,
+  "currency": "USD",
+  "exchange": "NASDAQ",
+  "exchangeName": "NASDAQ",
+  "exchangeCountry": "US",
+  "isMarketOpen": false,
+  "marketCap": 4901832394151.0,
+  "volume": 153662565.0,
+  "avgVolume": 177373700.0,
+  "dayLow": 199.27,
+  "dayHigh": 201.7,
+  "yearLow": 95.04,
+  "yearHigh": 212.19,
+  "pe": 41.16,
+  "eps": 4.9,
+  "open": 199.9,
+  "previousClose": 198.35,
+  "afterHoursPrice": 200.96,
+  "afterHoursChange": -0.72,
+  "afterHoursPercentChange": -0.357,
+  "history": [
+    {"date": "2026-04-17T09:30:00-04:00", "close": 199.5},
+    {"date": "2026-04-17T09:35:00-04:00", "close": 200.1}
+  ]
+}

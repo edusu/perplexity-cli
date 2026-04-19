@@ -239,6 +239,53 @@ perplexity history
 perplexity threads
 ```
 
+### Finance
+
+`perplexity finance` wraps the `/finance` surface: real-time quotes,
+market data, prediction markets, watchlist, and autosuggest. All
+commands default to `country=US` (override with `--country XX`) and
+accept `--json` for pipeable output.
+
+```bash
+# Quotes, profile, news
+perplexity finance quote NVDA              # price, change, volume, PE, 52w
+perplexity finance quote BTCUSD            # crypto works (USD-suffixed)
+perplexity finance quote NVDA --history    # include intraday history
+perplexity finance profile AAPL
+perplexity finance why NVDA                # AI-generated move explanation
+perplexity finance news NVDA --limit 10
+perplexity finance timeline NVDA
+
+# Market overview
+perplexity finance market                  # summary + indices + movers
+perplexity finance movers
+perplexity finance indices                 # stocks by default
+perplexity finance indices --market crypto
+perplexity finance sectors
+perplexity finance fixed-income
+
+# Prediction markets (Polymarket-backed)
+perplexity finance predictions                 # tag=finance
+perplexity finance predictions --tag politics
+perplexity finance predictions --tag crypto --limit 20
+
+# Personal
+perplexity finance watchlist
+perplexity finance watchlist --with-quotes
+perplexity finance portfolio                   # Plaid-linked only
+perplexity finance search apple                # autosuggest tickers
+
+# Finance-focused chat
+perplexity ask --finance "What's moving tech stocks today?"
+```
+
+Pipe JSON into `jq`:
+
+```bash
+perplexity finance quote NVDA --json | jq '.price'
+perplexity finance movers --json | jq '.[:3] | .[] | {symbol, change_percent}'
+```
+
 ## Python API
 
 Use perplexity-cli as a library in your own projects:
@@ -291,6 +338,20 @@ asyncio.run(main())
 | `perplexity models` | List available models |
 | `perplexity history` | Recent threads from server |
 | `perplexity threads` | Local saved threads |
+| `perplexity finance quote TICKER` | Price quote (stock, crypto, index, ETF) |
+| `perplexity finance profile TICKER` | Company profile |
+| `perplexity finance why TICKER` | AI explanation of today's move |
+| `perplexity finance news TICKER` | Publisher news for ticker |
+| `perplexity finance timeline TICKER` | Narrative news timeline |
+| `perplexity finance market` | Market overview (summary + indices + movers) |
+| `perplexity finance movers` | Top market movers |
+| `perplexity finance indices` | Major indices (stocks or crypto) |
+| `perplexity finance sectors` | Sector ETFs |
+| `perplexity finance fixed-income` | Bonds / yield instruments |
+| `perplexity finance predictions` | Prediction markets (Polymarket) |
+| `perplexity finance watchlist` | User's saved watchlist |
+| `perplexity finance portfolio` | Plaid-linked portfolio overview |
+| `perplexity finance search QUERY` | Autosuggest tickers |
 
 ### Global options
 
@@ -307,6 +368,14 @@ asyncio.run(main())
 | `--model TEXT` | Model to use (default: `pplx_pro`) |
 | `--no-sources` | Hide source citations |
 | `--raw` | Plain text output (no Rich formatting) |
+| `--finance` | (ask only) Bias the search toward finance sources |
+
+### Common options (finance)
+
+| Option | Description |
+|--------|-------------|
+| `--country XX` | ISO country code (default: `US`) |
+| `--json` | JSON output for piping into jq |
 
 ## How it works
 

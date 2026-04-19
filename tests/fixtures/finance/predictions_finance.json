@@ -1,0 +1,24 @@
+[
+  {
+    "provider": "polymarket",
+    "title": "What will WTI Crude Oil hit in April 2026?",
+    "slug": "what-price-will-wti-hit-in-april-2026",
+    "id": "305510",
+    "icon": "https://polymarket-upload.s3.us-east-2.amazonaws.com/crude-oil.png",
+    "volume": 42122308.12,
+    "currency": "USD",
+    "startDate": "2026-03-25T04:01:18.598000Z",
+    "endDate": "2026-04-30T00:00:00Z",
+    "markets": [
+      {
+        "id": "1712298",
+        "question": "\u2191 $110",
+        "probability": 1.0,
+        "outcomes": ["Yes", "No"],
+        "outcomePrices": [1.0, 0.0],
+        "volume": 898046.95,
+        "startDate": "2026-03-25T04:07:18.777000Z"
+      }
+    ]
+  }
+]

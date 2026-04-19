@@ -1,0 +1,24 @@
+[
+  {
+    "symbol": "ESUSD",
+    "name": "S&P Futures",
+    "price": 7161.5,
+    "change": 84.5,
+    "changesPercentage": 1.194,
+    "currency": "USD",
+    "exchange": "COMMODITY",
+    "history": [
+      {"date": "2026-04-17T00:00:00-04:00", "close": 7078.5},
+      {"date": "2026-04-17T00:05:00-04:00", "close": 7080.5}
+    ]
+  },
+  {
+    "symbol": "DJI",
+    "name": "Dow Jones",
+    "price": 45000.0,
+    "change": 200.0,
+    "changesPercentage": 0.44,
+    "currency": "USD",
+    "exchange": "INDEX"
+  }
+]

@@ -1,0 +1,22 @@
+[
+  {
+    "symbol": "XLK",
+    "name": "Technology",
+    "price": 154.35,
+    "change": 2.33,
+    "changesPercentage": 1.53269,
+    "currency": "USD",
+    "exchange": "AMEX",
+    "marketCap": 83983684422.0
+  },
+  {
+    "symbol": "XLE",
+    "name": "Energy",
+    "price": 55.02,
+    "change": -1.56,
+    "changesPercentage": -2.75716,
+    "currency": "USD",
+    "exchange": "AMEX",
+    "marketCap": 37353505505.0
+  }
+]
