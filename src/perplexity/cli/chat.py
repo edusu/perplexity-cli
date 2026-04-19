@@ -113,6 +113,10 @@ def _render_result(
 
     if raw:
         click.echo(result.answer)
+        if not no_sources and result.sources:
+            click.echo("\n---\nSources:")
+            for i, source in enumerate(result.sources, 1):
+                click.echo(f"[{i}] {source.name} — {source.url}")
         return True
 
     console.print()
@@ -168,6 +172,12 @@ def _resolve_question(question: str | None) -> str:
 @click.option("--model", default=MODEL_PRO, help="Model preference (e.g. pplx_pro).")
 @click.option("--no-sources", is_flag=True, help="Hide source citations.")
 @click.option("--raw", is_flag=True, help="Print raw answer without Rich formatting.")
+@click.option(
+    "--finance",
+    "finance",
+    is_flag=True,
+    help="Bias the search toward finance sources (search_focus=finance).",
+)
 @click.pass_context
 @run_async
 async def ask(
@@ -177,6 +187,7 @@ async def ask(
     model: str,
     no_sources: bool,
     raw: bool,
+    finance: bool,
 ) -> None:
     """Ask Perplexity a question and display the answer.
 
@@ -189,10 +200,13 @@ async def ask(
         perplexity ask "What is Rust?" --thread rust
 
         perplexity ask "Latest news about AI" -t news --model pplx_pro
+
+        perplexity ask --finance "What's moving tech stocks today?"
     """
     question = _resolve_question(question)
+    search_focus = "finance" if finance else "internet"
     async with authenticated_client(get_storage_from_ctx(ctx)) as client:
-        result = await client.chat.ask(question, model=model)
+        result = await client.chat.ask(question, model=model, search_focus=search_focus)
 
     thread_name = thread or _DEFAULT_THREAD
     _save_thread(thread_name, result)

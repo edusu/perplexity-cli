@@ -5,6 +5,7 @@ from __future__ import annotations
 import click
 
 from perplexity.cli.chat import ask, chat, followup, history, list_threads, research
+from perplexity.cli.finance import finance
 from perplexity.cli.models import models
 from perplexity.cli.session import login, status
 
@@ -34,6 +35,7 @@ cli.add_command(research)
 cli.add_command(models)
 cli.add_command(list_threads)
 cli.add_command(history)
+cli.add_command(finance)
 
 
 def main() -> None:
