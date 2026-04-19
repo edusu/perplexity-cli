@@ -15,3 +15,7 @@ class ChatError(PerplexityError):
 
 class RateLimitError(PerplexityError):
     """Raised when the API rate limit is exceeded."""
+
+
+class FinanceError(PerplexityError):
+    """Raised when a finance API request returns an error or unknown ticker."""

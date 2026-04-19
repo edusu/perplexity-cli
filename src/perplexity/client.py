@@ -10,6 +10,7 @@ from pathlib import Path
 
 from perplexity._chat import ChatAPI
 from perplexity._core import ClientCore
+from perplexity._finance import FinanceAPI
 from perplexity._models import ModelsAPI
 from perplexity._threads import ThreadsAPI
 from perplexity.auth import AuthTokens
@@ -26,6 +27,7 @@ class PerplexityClient:
 
     Attributes:
         chat: Chat API for asking questions.
+        finance: Finance API for quotes, market data, and predictions.
         models: Models API for listing available models.
         threads: Threads API for listing conversation history.
     """
@@ -38,6 +40,7 @@ class PerplexityClient:
         """
         self._core = ClientCore(auth)
         self.chat = ChatAPI(self._core)
+        self.finance = FinanceAPI(self._core)
         self.models = ModelsAPI(self._core)
         self.threads = ThreadsAPI(self._core)
 
