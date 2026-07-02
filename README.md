@@ -23,16 +23,10 @@ Requires Python 3.10+.
 
 ```bash
 # Install with uv (recommended)
-uv pip install -e ".[browser]"
+uv tool install . --with playwright
 
-# Or with pip
-pip install -e ".[browser]"
-
-# Install Chromium for the login command
-playwright install chromium
+$(uv tool dir)/perplexity-cli/bin/playwright install chromium
 ```
-
-The `[browser]` extra includes Playwright, needed only for the `login` command. If you manage cookies manually, the base install (`pip install -e .`) is sufficient.
 
 ## Authentication
 
