@@ -17,3 +17,9 @@ recon/captured_*.json
 .mypy_cache/
 .ruff_cache/
 *.png
+
+# AI agent local config
+.agents/
+.cursor/
+.codex/
+.gemini/
